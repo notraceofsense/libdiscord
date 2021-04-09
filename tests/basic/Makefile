@@ -6,7 +6,7 @@ CC=gcc
 # -Wall	enable a lot of compiler warnings
 CFLAGS= -g -Wall
 
-INCLUDES = -I../include
+INCLUDES = -I../../include
 
 SRCS = main.c
 
