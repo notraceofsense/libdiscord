@@ -1,0 +1,15 @@
+Copyright 2021 NoTraceOfSense
+
+Licensed under LGPLv3, go look at LICENSE.md
+or LICENSE.LESSER.md if you want to know about that.
+
+If you use this code, you know the drill, please send
+your improvements back. I need them. My code sucks.
+
+Acknowledgements:
+
+    src/etf:
+        Inspired by Discord's erlpack
+        https://github.com/discord/erlpack
+
+i'm not a lawyer i just wanna write a discord lib in C
