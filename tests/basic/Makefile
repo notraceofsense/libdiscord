@@ -8,6 +8,10 @@ CFLAGS= -g -Wall
 
 INCLUDES = -I../../include
 
+LIBSPATH = -L../../lib
+
+LIBS = -lwebsockets
+
 SRCS = main.c
 
 OBJS = $(SRCS:.c=.o)
