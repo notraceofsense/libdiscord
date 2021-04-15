@@ -8,9 +8,11 @@ CFLAGS= -g -Wall
 
 INCLUDES = -I../../include
 
-LIBSPATH = -L../../lib
+LIBSPATH = -L../../lib -L/usr/local/lib
 
 LIBS = -lwebsockets
+
+LDPATH = $(LIBSPATH) $(LIBS)
 
 SRCS = main.c
 
@@ -24,7 +26,7 @@ TARGET=basic
 all: $(TARGET)
 
 $(TARGET): $(OBJS)
-	$(CC) $(CFLAGS) $(INCLUDES) -o $(TARGET) $(OBJS)
+	$(CC) $(CFLAGS) $(INCLUDES) $(LDPATH) -o $(TARGET) $(OBJS)
 
 .c.o:
 	$(CC) $(CFLAGS) $(INCLUDES) -c $< -o $@
