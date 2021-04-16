@@ -2,29 +2,70 @@
  * All curl_easy_setopt() options are documented at:
  * https://curl.se/libcurl/c/curl_easy_setopt.html
  ************************************************************************/
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+
 #include <curl/curl.h>
+#include <json.h>
 
 #include "../const.h"
 #include "const.h"
 
 
 
+struct string {
+  char *ptr;
+  size_t len;
+};
+
+void init_string(struct string *s) {
+  s->len = 0;
+  s->ptr = malloc(s->len+1);
+  if (s->ptr == NULL) {
+    fprintf(stderr, "malloc() failed\n");
+    exit(EXIT_FAILURE);
+  }
+  s->ptr[0] = '\0';
+}
+
+size_t writefunc(void *ptr, size_t size, size_t nmemb, struct string *s)
+{
+  size_t new_len = s->len + size*nmemb;
+  s->ptr = realloc(s->ptr, new_len+1);
+  if (s->ptr == NULL) {
+    fprintf(stderr, "realloc() failed\n");
+    exit(EXIT_FAILURE);
+  }
+  memcpy(s->ptr+s->len, ptr, size*nmemb);
+  s->ptr[new_len] = '\0';
+  s->len = new_len;
+
+  return size*nmemb;
+}
+
 int main()
 {
   CURLcode ret;
   CURL *hnd;
-
+  struct string s;
   hnd = curl_easy_init();
-  curl_easy_setopt(hnd, CURLOPT_BUFFERSIZE, 102400L);
-  curl_easy_setopt(hnd, CURLOPT_URL, DISCORD_HTTP_GET_GATEWAY);
-  curl_easy_setopt(hnd, CURLOPT_NOPROGRESS, 1L);
-  curl_easy_setopt(hnd, CURLOPT_USERAGENT, LIBDISCORD_USER_AGENT);
-  curl_easy_setopt(hnd, CURLOPT_MAXREDIRS, 50L);
-  curl_easy_setopt(hnd, CURLOPT_HTTP_VERSION, (long)CURL_HTTP_VERSION_2TLS);
-  curl_easy_setopt(hnd, CURLOPT_FTP_SKIP_PASV_IP, 1L);
-  curl_easy_setopt(hnd, CURLOPT_TCP_KEEPALIVE, 1L);
 
-  /* Here is a list of options the curl code used that cannot get generated
+  if(hnd) {
+
+    init_string(&s);
+
+    curl_easy_setopt(hnd, CURLOPT_BUFFERSIZE, 102400L);
+    curl_easy_setopt(hnd, CURLOPT_URL, DISCORD_HTTP_GET_GATEWAY);
+    curl_easy_setopt(hnd, CURLOPT_NOPROGRESS, 1L);
+    curl_easy_setopt(hnd, CURLOPT_USERAGENT, LIBDISCORD_USER_AGENT);
+    curl_easy_setopt(hnd, CURLOPT_MAXREDIRS, 50L);
+    curl_easy_setopt(hnd, CURLOPT_HTTP_VERSION, (long)CURL_HTTP_VERSION_2TLS);
+    curl_easy_setopt(hnd, CURLOPT_FTP_SKIP_PASV_IP, 1L);
+    curl_easy_setopt(hnd, CURLOPT_TCP_KEEPALIVE, 1L);
+    curl_easy_setopt(hnd, CURLOPT_WRITEFUNCTION, writefunc);
+    curl_easy_setopt(hnd, CURLOPT_WRITEDATA, &s);
+    /* Here is a list of options the curl code used that cannot get generated
      as source easily. You may select to either not use them or implement
      them yourself.
 
@@ -42,11 +83,23 @@ int main()
 
   */
 
-  ret = curl_easy_perform(hnd);
+    ret = curl_easy_perform(hnd);
 
-  curl_easy_cleanup(hnd);
-  hnd = NULL;
+    if(ret != CURLE_OK) {
+    	fprintf(stderr, "curl_easy_perform() failed: %s\n",
+    	curl_easy_strerror(ret));
+		curl_easy_cleanup(hnd);
+		exit(ret);
+	} else {
+		printf("%s\n", s.ptr);
+		curl_easy_cleanup(hnd);
+    }
+    	curl_easy_cleanup(hnd);
+	} else {
+		fprintf(stderr, "curl_easy_init() failed\n");
+		exit(EXIT_FAILURE);
+	}
 
-  return (int)ret;
+
 }
 /**** End of sample code ****/
