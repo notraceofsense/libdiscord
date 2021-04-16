@@ -4,6 +4,8 @@
 #include <signal.h>
 #include <string.h>
 
+#include <curl/curl.h>
+
 //copy pasted from libwebsockets
 
 static int interrupted, rx_seen, test;
@@ -59,8 +61,28 @@ sigint_handler(int sig)
 	interrupted = 1;
 }
 
+struct MemStruct {
+    char * memory;
+    size_t size;
+};
+
+static size_t WriteMemoryCallback(void * contents, size_t size, size_t nmemb, void *userp) {
+    size_t realsize = size * nmemb;
+    struct MemStruct *mem = (struct MemStruct*)userp;
+
+    char *ptr = realloc(mem->memory, mem->size + realsize + 1);
+    if(ptr == NULL) {
+        /* out of mem */
+        fprintf
+    }
+}
+
 int main(int argc, const char **argv)
 {
+    curl_global_init(CURL_GLOBAL_ALL);
+
+
+
 	struct lws_context_creation_info info;
 	struct lws_client_connect_info i;
 	struct lws_context *context;

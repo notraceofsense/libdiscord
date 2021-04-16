@@ -10,7 +10,7 @@ INCLUDES = -I../../include
 
 LIBSPATH = -L../../lib -L/usr/local/lib
 
-LIBS = -lwebsockets
+LIBS = -lwebsockets -lcurl
 
 LDPATH = $(LIBSPATH) $(LIBS)
 
