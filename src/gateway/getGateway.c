@@ -7,12 +7,10 @@
 #include <string.h>
 
 #include <curl/curl.h>
-#include <json.h>
+#include <json-c/json.h>
 
 #include "../const.h"
 #include "const.h"
-
-
 
 struct string {
   char *ptr;
@@ -94,12 +92,22 @@ int main()
 		printf("%s\n", s.ptr);
 		curl_easy_cleanup(hnd);
     }
-    	curl_easy_cleanup(hnd);
 	} else {
 		fprintf(stderr, "curl_easy_init() failed\n");
 		exit(EXIT_FAILURE);
 	}
+	struct json_object *jobj = json_tokener_parse(s.ptr);
+	struct json_object *urlthing = NULL;
 
+	if(json_object_object_get_ex(jobj, "url", &urlthing)) {
+		printf("%s\n", json_object_get_string(urlthing));
+	} else {
+		fprintf(
+			stderr,
+			"Faile\n"
+		);
+	}
 
+	free(s.ptr);
 }
 /**** End of sample code ****/
