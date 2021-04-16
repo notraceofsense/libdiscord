@@ -72,8 +72,7 @@ static size_t WriteMemoryCallback(void * contents, size_t size, size_t nmemb, vo
 
     char *ptr = realloc(mem->memory, mem->size + realsize + 1);
     if(ptr == NULL) {
-        /* out of mem */
-        fprintf
+        /* out */
     }
 }
 
