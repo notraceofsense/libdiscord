@@ -33,7 +33,8 @@ int init_string(struct string *s)
     return 0;
 }
 
-void deinit_string(struct string *s) {
+void deinit_string(struct string *s)
+{
     free(s->ptr);
     s->ptr = NULL;
 
@@ -113,10 +114,13 @@ static struct discord_gateway_connection
 
 static struct lws_context *context;
 
-static int interrupted, port = 443, ssl_connection = LCCSCF_USE_SSL;
+static int interrupted, port = 443, ssl_connection = LCCSCF_USE_SSL,
+                        do_identify;
 static const char *pro = "discord-gateway-protocol";
 static int heartbeat_interval;
 static int sequence_num;
+
+static char *token;
 
 static void connect_client(lws_sorted_usec_list_t *sul)
 {
@@ -138,23 +142,59 @@ static void connect_client(lws_sorted_usec_list_t *sul)
     i.pwsi = &dgc->wsi;
     i.userdata = dgc;
 
-    if(!lws_client_connect_via_info(&i)) {
+    if (!lws_client_connect_via_info(&i))
+    {
         lwsl_err("%s: connection failed\n", __func__);
         interrupted = 1;
     }
 }
+static int intents = 513;
 
-static inline void discord_gateway_receive(struct lws *wsi, void *user, void *in, size_t len) {
+static const char * os = "linux";
+static const char * libname = "libdiscord";
+
+static inline void discord_gateway_identify(struct lws *wsi) {
+    struct json_object *payload = NULL;
+    struct json_object *payload_data = NULL;
+    struct json_object *payload_data_props = NULL;
+    payload = json_object_new_object();
+    payload_data = json_object_new_object();
+    payload_data_props = json_object_new_object();
+
+    json_object_object_add(payload_data_props, "$os", json_object_new_string(os));
+    json_object_object_add(payload_data_props, "$browser", json_object_new_string(libname));
+    json_object_object_add(payload_data_props, "$device", json_object_new_string(libname));
+
+    json_object_object_add(payload_data, "token", json_object_new_string_len(token, 59));
+    json_object_object_add(payload_data, "intents", json_object_new_int(intents));
+    json_object_object_add(payload_data, "properties", payload_data_props);
+
+    json_object_object_add(payload, "op", json_object_new_int(DISCORD_GATEWAY_IDENTIFY));
+    json_object_object_add(payload, "d", payload_data);
+lwsl_user("1\n");
+    char buf[LWS_PRE + 4096];
+
+    memset(&buf[LWS_PRE], 0, 4096);
+    strcpy(&buf[LWS_PRE], json_object_to_json_string(payload));
+    lwsl_user("%s: sending payload %s", __func__, json_object_to_json_string(payload));
+    lws_write(wsi, &buf[LWS_PRE], strlen(&buf[LWS_PRE]), LWS_WRITE_TEXT);
+}
+
+static inline void discord_gateway_receive(struct lws *wsi, void *user, void *in, size_t len)
+{
     struct json_object *json_payload = json_tokener_parse((char *)in);
     struct json_object *json_op = NULL;
-    if(!json_pointer_get(json_payload, "/op", &json_op)) {
+    if (!json_pointer_get(json_payload, "/op", &json_op))
+    {
         int op = json_object_get_int(json_op);
         lwsl_user("%i\n", op);
-        switch(op) {
+        switch (op)
+        {
         case DISCORD_GATEWAY_DISPATCH:
             lwsl_user("DISPATCH received\n");
             struct json_object *json_sequence_number = NULL;
-            if(!json_pointer_get(json_payload, "/s", &json_sequence_number)) {
+            if (!json_pointer_get(json_payload, "/s", &json_sequence_number))
+            {
                 sequence_num = json_object_get_int(json_sequence_number);
             }
             break;
@@ -170,12 +210,18 @@ static inline void discord_gateway_receive(struct lws *wsi, void *user, void *in
         case DISCORD_GATEWAY_HELLO:
             lwsl_user("HELLO received\n");
             struct json_object *json_payload_data_heartbeat_interval = NULL;
-                if(!json_pointer_get(json_payload,
-                "/d/heartbeat_interval",
-                &json_payload_data_heartbeat_interval)) {
-                    heartbeat_interval = json_object_get_int(json_payload_data_heartbeat_interval) * 1000;
-                    lws_set_timer_usecs(wsi, heartbeat_interval);
+            if (!json_pointer_get(json_payload,
+                                  "/d/heartbeat_interval",
+                                  &json_payload_data_heartbeat_interval))
+            {
+                heartbeat_interval = json_object_get_int(json_payload_data_heartbeat_interval) * 1000;
+                lws_set_timer_usecs(wsi, heartbeat_interval);
+                if(do_identify) {
+                    lwsl_user("Sending IDENTIFY\n");
+                    discord_gateway_identify(wsi);
+                    do_identify = 0;
                 }
+            }
             break;
         case DISCORD_GATEWAY_HEARTBEAT_ACK:
             lwsl_user("HEARTBEAT ACK\n");
@@ -188,37 +234,44 @@ static inline void discord_gateway_receive(struct lws *wsi, void *user, void *in
 
 static struct json_object *json_heartbeat_payload;
 
+
+
 static int callback_discord_gateway(struct lws *wsi,
-enum lws_callback_reasons reason, void *user, void *in, size_t len) {
+                                    enum lws_callback_reasons reason, void *user, void *in, size_t len)
+{
     struct discord_gateway_connection *dgc =
-    (struct discord_gateway_connection *)user;
-    switch (reason) {
+        (struct discord_gateway_connection *)user;
+    switch (reason)
+    {
     case LWS_CALLBACK_CLIENT_CONNECTION_ERROR:
-		lwsl_err("CLIENT_CONNECTION_ERROR: %s\n",
-			 in ? (char *)in : "(null)");
-		interrupted = 1;
+        lwsl_err("CLIENT_CONNECTION_ERROR: %s\n",
+                 in ? (char *)in : "(null)");
+        interrupted = 1;
         break;
     case LWS_CALLBACK_CLIENT_RECEIVE:
-		lwsl_user("%s: %s\n", __func__, (char *)in);
+        lwsl_user("%s: %s\n", __func__, (char *)in);
         discord_gateway_receive(wsi, user, in, len);
-		break;
+        break;
     case LWS_CALLBACK_CLIENT_ESTABLISHED:
-		lwsl_user("%s: established\n", __func__);
-		break;
+        lwsl_user("%s: established\n", __func__);
+        break;
     case LWS_CALLBACK_CLIENT_CLOSED:
         interrupted = 1;
         break;
-    case LWS_CALLBACK_TIMER: ;
+    case LWS_CALLBACK_TIMER:;
         struct json_object *payload = NULL;
-        if(json_object_deep_copy(json_heartbeat_payload, &payload,
-        json_c_shallow_copy_default) == 0) {
-            if(sequence_num == NULL) {
+        if (json_object_deep_copy(json_heartbeat_payload, &payload,
+                                  json_c_shallow_copy_default) == 0)
+        {
+            if (sequence_num == NULL)
+            {
                 json_object_object_add(payload, "d",
-                json_object_new_null());
+                                       json_object_new_null());
             }
-            else {
+            else
+            {
                 json_object_object_add(payload, "d",
-                json_object_new_int(sequence_num));
+                                       json_object_new_int(sequence_num));
             }
 
             char buf[LWS_PRE + 4096];
@@ -230,9 +283,13 @@ enum lws_callback_reasons reason, void *user, void *in, size_t len) {
             lws_write(wsi, &buf[LWS_PRE], strlen(&buf[LWS_PRE]), LWS_WRITE_TEXT);
 
             lws_set_timer_usecs(wsi, heartbeat_interval);
-        } else {
+        }
+        else
+        {
             interrupted = 1;
         }
+        break;
+    LWS_CALLBACK_CLIENT_WRITEABLE:
         break;
     default:
         break;
@@ -242,19 +299,27 @@ enum lws_callback_reasons reason, void *user, void *in, size_t len) {
 }
 
 static const struct lws_protocols protocols[] = {
-    { "discord-gateway", callback_discord_gateway, 0, 0, },
-    { NULL, NULL, 0, 0 }
-};
+    {
+        "discord-gateway",
+        callback_discord_gateway,
+        0,
+        0,
+    },
+    {NULL, NULL, 0, 0}};
 
-static void sigint_handler(int sig) {
+static void sigint_handler(int sig)
+{
     interrupted = 1;
 }
 
-int main(int argc, const char **argv) {
+int main(int argc, const char **argv)
+{
+    do_identify = 0;
+    token = NULL;
     sequence_num = NULL;
     json_heartbeat_payload = json_object_new_object();
     json_object_object_add(json_heartbeat_payload, "op",
-    json_object_new_int(DISCORD_GATEWAY_HEARTBEAT));
+                           json_object_new_int(DISCORD_GATEWAY_HEARTBEAT));
     struct lws_context_creation_info info;
     const char *p;
     int n = 0;
@@ -265,45 +330,92 @@ int main(int argc, const char **argv) {
     lws_cmdline_option_handle_builtin(argc, argv, &info);
 
     info.options = LWS_SERVER_OPTION_DO_SSL_GLOBAL_INIT;
-	info.port = CONTEXT_PORT_NO_LISTEN; /* we do not run any server */
-	info.protocols = protocols;
+    info.port = CONTEXT_PORT_NO_LISTEN; /* we do not run any server */
+    info.protocols = protocols;
 
     if ((p = lws_cmdline_option(argc, argv, "--protocol")))
-		pro = p;
+        pro = p;
 
-	if ((p = lws_cmdline_option(argc, argv, "-p")))
-		port = atoi(p);
+    if ((p = lws_cmdline_option(argc, argv, "-t")))
+    {
+        FILE *fp;
+        fp = fopen(p, "r");
+        if (fp != NULL)
+        {
+            if (fseek(fp, 0L, SEEK_END) != 0)
+            {
+                perror("fseek");
+                exit(1);
+            }
+            do_identify = 1;
+            long bufsz = ftell(fp);
+            if (bufsz == -1)
+            {
+                perror("ftell");
+                exit(1);
+            }
 
-	if (lws_cmdline_option(argc, argv, "-n"))
-		ssl_connection &= ~LCCSCF_USE_SSL;
+            token = malloc(sizeof(char) * (bufsz + 1));
 
-	if (lws_cmdline_option(argc, argv, "-j"))
-		ssl_connection |= LCCSCF_ALLOW_SELFSIGNED;
+            if (fseek(fp, 0L, SEEK_SET) != 0)
+            {
+                perror("fseek");
+                exit(1);
+            }
 
-	if (lws_cmdline_option(argc, argv, "-k"))
-		ssl_connection |= LCCSCF_ALLOW_INSECURE;
+            size_t new_length = fread(token, sizeof(char),
+                                      bufsz, fp);
 
-	if (lws_cmdline_option(argc, argv, "-m"))
-		ssl_connection |= LCCSCF_SKIP_SERVER_CERT_HOSTNAME_CHECK;
+            if (ferror(fp))
+            {
+                perror("fread");
+                exit(1);
+            }
 
-	if (lws_cmdline_option(argc, argv, "-e"))
-		ssl_connection |= LCCSCF_ALLOW_EXPIRED;
+            token[new_length++] = '\0';
+        }
+        else
+        {
+            perror("fopen");
+            exit(EXIT_FAILURE);
+        }
+        fclose(fp);
+    }
 
-	info.fd_limit_per_thread = 1 + 1 + 1;
+    if ((p = lws_cmdline_option(argc, argv, "-p")))
+        port = atoi(p);
 
-	context = lws_create_context(&info);
-	if (!context) {
-		lwsl_err("lws init failed\n");
-		return 1;
-	}
+    if (lws_cmdline_option(argc, argv, "-n"))
+        ssl_connection &= ~LCCSCF_USE_SSL;
 
+    if (lws_cmdline_option(argc, argv, "-j"))
+        ssl_connection |= LCCSCF_ALLOW_SELFSIGNED;
+
+    if (lws_cmdline_option(argc, argv, "-k"))
+        ssl_connection |= LCCSCF_ALLOW_INSECURE;
+
+    if (lws_cmdline_option(argc, argv, "-m"))
+        ssl_connection |= LCCSCF_SKIP_SERVER_CERT_HOSTNAME_CHECK;
+
+    if (lws_cmdline_option(argc, argv, "-e"))
+        ssl_connection |= LCCSCF_ALLOW_EXPIRED;
+
+    info.fd_limit_per_thread = 1 + 1 + 1;
+
+    context = lws_create_context(&info);
+    if (!context)
+    {
+        lwsl_err("lws init failed\n");
+        return 1;
+    }
+    lwsl_user("doIdentify: %d\n", do_identify);
     lws_sul_schedule(context, 0, &dgc.sul, connect_client, 1);
 
-	while (n >= 0 && !interrupted)
-		n = lws_service(context, 0);
+    while (n >= 0 && !interrupted)
+        n = lws_service(context, 0);
 
-	lws_context_destroy(context);
-	lwsl_user("Completed\n");
+    lws_context_destroy(context);
+    lwsl_user("Completed\n");
 
-	return 0;
+    return 0;
 }
